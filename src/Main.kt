@@ -6,4 +6,5 @@ fun main(args: Array<String>) {
     parser.parseFile("test.txt")
     //    parser.parseFile("test2.txt")
     //    parser.parseFile("test3.txt")
+    //    parser.parseFile("test4.txt")
 }

@@ -1,5 +1,4 @@
-((( \not A_{12}) \and B_{1}) \eq (C \or D))
-3
-E
-(( \not C) \and ( \not D))
-(B_{1} \imply A_{12})
+(A \eq ( \not B))
+2
+A
+( \not B)

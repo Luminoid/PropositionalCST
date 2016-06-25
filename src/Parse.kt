@@ -1,5 +1,7 @@
+
 import pojo.*
 import java.io.File
+import java.io.FileWriter
 import java.io.IOException
 import java.util.*
 import kotlin.text.Regex
@@ -10,6 +12,20 @@ import kotlin.text.Regex
 
 class Parse() {
     public fun parseFile(fileName: String) {
+        // clear the result file
+        var file = File("./output/result.txt")
+        if (!file.exists()) {
+            try {
+                file.createNewFile();
+            } catch (ex: IOException) {
+                ex.printStackTrace();
+            }
+        }
+        var fw = FileWriter(file, false)
+        fw.write("")
+        fw.flush()
+        fw.close()
+
         var filePath = "./input/" + fileName
         try {
             var file = File(filePath)
@@ -29,18 +45,17 @@ class Parse() {
         root.proposition.sign = false
         tree = Tree(root)
         unreducedNodeList.add(root)
-        reduceNode(unreducedNodeList)
+        inspectNode(unreducedNodeList)
 
         // premises
         propList.drop(2).forEach {
             addNode(it, unreducedNodeList, root)
-            reduceNode(unreducedNodeList)
+            inspectNode(unreducedNodeList)
         }
         while (unreducedNodeList.size != 0) {
-            reduceNode(unreducedNodeList)
+            inspectNode(unreducedNodeList)
         }
-        //        printTreeStructure(root)
-        printReduceSequence(root)
+//        printTreeStructure(root)
         printCounterExample(findCounterExample(root), root)
     }
 
@@ -54,23 +69,33 @@ class Parse() {
         }
     }
 
-    private fun reduceNode(unreducedNodeList: MutableList<Node>) {
-        var tmpList: MutableList<Node> = ArrayList()
-        tmpList.addAll(unreducedNodeList)
-        unreducedNodeList.clear()
-        tmpList.sortedBy { it.level }.forEach { node ->
-            when {
-                node.proposition.topLevelSymbolIndex == 0
-                -> {
-                    if (isContradictory(node)) {
-                        getLeafNodeList(node).forEach {
-                            var contradictoryNode = Node(Proposition(false, ArrayList<Symbol>(), 0, ""),
-                                    it.level + 1, it, null, null)
-                            it.leftChild = contradictoryNode
-                        }
-                    }
-                }
+    private fun inspectNode(unreducedNodeList: MutableList<Node>) {
+        var node = unreducedNodeList.sortedBy { it.level }[0]
+        // Propositional Letter
+        if (isContradictory(node)) {
+            getLeafNodeList(node).forEach {
+                var contradictoryNode = Node(Proposition(false, ArrayList<Symbol>(), 0, ""),
+                        it.level + 1, it, null, null)
+                it.leftChild = contradictoryNode
+            }
+            unreducedNodeList.removeAll(getAllChildren(node))
+        } else {
+            if (node.proposition.topLevelSymbolIndex == 0 || node.isAtomicRoot) {
+                unreducedNodeList.remove(node)
+            } else {
+                reduceNode(node, unreducedNodeList)
+                unreducedNodeList.remove(node)
+            }
+        }
+        printNode(node);
+    }
 
+    private fun reduceNode(node: Node, unreducedNodeList: MutableList<Node>) {
+        getLeafNodeList(node).forEach {
+            var atomicRoot = node.copy(level = it.level + 1, parentNode = it, leftChild = null, rightChild = null, isAtomicRoot = true)
+            it.leftChild = atomicRoot
+            unreducedNodeList.add(atomicRoot)
+            when {
                 node.proposition.topLevelSymbolIndex == 1
                 -> {
                     var symbolList = node.proposition.content
@@ -78,14 +103,11 @@ class Parse() {
                     var topLevelSymbolIndex = getTopLevelSymbolIndex(childSymbolList)
                     var topLevelSymbol = childSymbolList[topLevelSymbolIndex].value
                     var sign = !node.proposition.sign
-                    getLeafNodeList(node).forEach {
-                        var reducedNode = node.copy(level = it.level + 1, parentNode = it, leftChild = null, rightChild = null)
-                        it.leftChild = reducedNode
-                        var onlyChildNode = Node(Proposition(sign, childSymbolList, topLevelSymbolIndex, topLevelSymbol),
-                                reducedNode.level + 1, reducedNode, null, null)
-                        reducedNode.leftChild = onlyChildNode
-                        unreducedNodeList.add(onlyChildNode)
-                    }
+
+                    var onlyChildNode = Node(Proposition(sign, childSymbolList, topLevelSymbolIndex, topLevelSymbol),
+                            atomicRoot.level + 1, atomicRoot, null, null)
+                    atomicRoot.leftChild = onlyChildNode
+                    unreducedNodeList.add(onlyChildNode)
                 }
 
                 node.proposition.topLevelSymbol == "\\eq"
@@ -118,26 +140,23 @@ class Parse() {
                         sign3 = false
                         sign4 = true
                     }
-                    getLeafNodeList(node).forEach {
-                        var reducedNode = node.copy(level = it.level + 1, parentNode = it, leftChild = null, rightChild = null)
-                        it.leftChild = reducedNode
-                        var leftChild1Node = Node(Proposition(sign1, leftChild1SymbolList, topLevelSymbolIndex1,
-                                topLevelSymbol1), reducedNode.level + 1, reducedNode, null, null)
-                        var leftChild2Node = Node(Proposition(sign2, leftChild2SymbolList, topLevelSymbolIndex2,
-                                topLevelSymbol2), reducedNode.level + 2, leftChild1Node, null, null)
-                        var rightChild1Node = Node(Proposition(sign3, rightChild1SymbolList, topLevelSymbolIndex3,
-                                topLevelSymbol3), reducedNode.level + 1, reducedNode, null, null)
-                        var rightChild2Node = Node(Proposition(sign4, leftChild2SymbolList, topLevelSymbolIndex4,
-                                topLevelSymbol4), reducedNode.level + 2, rightChild1Node, null, null)
-                        reducedNode.leftChild = leftChild1Node
-                        reducedNode.rightChild = rightChild1Node
-                        leftChild1Node.leftChild = leftChild2Node
-                        rightChild1Node.leftChild = rightChild2Node
-                        unreducedNodeList.add(leftChild1Node)
-                        unreducedNodeList.add(leftChild2Node)
-                        unreducedNodeList.add(rightChild1Node)
-                        unreducedNodeList.add(rightChild2Node)
-                    }
+
+                    var leftChild1Node = Node(Proposition(sign1, leftChild1SymbolList, topLevelSymbolIndex1,
+                            topLevelSymbol1), atomicRoot.level + 1, atomicRoot, null, null)
+                    var leftChild2Node = Node(Proposition(sign2, leftChild2SymbolList, topLevelSymbolIndex2,
+                            topLevelSymbol2), atomicRoot.level + 2, leftChild1Node, null, null)
+                    var rightChild1Node = Node(Proposition(sign3, rightChild1SymbolList, topLevelSymbolIndex3,
+                            topLevelSymbol3), atomicRoot.level + 1, atomicRoot, null, null)
+                    var rightChild2Node = Node(Proposition(sign4, leftChild2SymbolList, topLevelSymbolIndex4,
+                            topLevelSymbol4), atomicRoot.level + 2, rightChild1Node, null, null)
+                    atomicRoot.leftChild = leftChild1Node
+                    atomicRoot.rightChild = rightChild1Node
+                    leftChild1Node.leftChild = leftChild2Node
+                    rightChild1Node.leftChild = rightChild2Node
+                    unreducedNodeList.add(leftChild1Node)
+                    unreducedNodeList.add(leftChild2Node)
+                    unreducedNodeList.add(rightChild1Node)
+                    unreducedNodeList.add(rightChild2Node)
                 }
 
                 (node.proposition.topLevelSymbol == "\\and" && node.proposition.sign == false) ||
@@ -163,18 +182,15 @@ class Parse() {
                         sign1 = false
                         sign2 = true
                     }
-                    getLeafNodeList(node).forEach {
-                        var reducedNode = node.copy(level = it.level + 1, parentNode = it, leftChild = null, rightChild = null)
-                        it.leftChild = reducedNode
-                        var leftChildNode = Node(Proposition(sign1, leftChildSymbolList, topLevelSymbolIndex1,
-                                topLevelSymbol1), reducedNode.level + 1, reducedNode, null, null)
-                        var rightChildNode = Node(Proposition(sign2, rightChildSymbolList, topLevelSymbolIndex2,
-                                topLevelSymbol2), reducedNode.level + 1, reducedNode, null, null)
-                        reducedNode.leftChild = leftChildNode
-                        reducedNode.rightChild = rightChildNode
-                        unreducedNodeList.add(leftChildNode)
-                        unreducedNodeList.add(rightChildNode)
-                    }
+
+                    var leftChildNode = Node(Proposition(sign1, leftChildSymbolList, topLevelSymbolIndex1,
+                            topLevelSymbol1), atomicRoot.level + 1, atomicRoot, null, null)
+                    var rightChildNode = Node(Proposition(sign2, rightChildSymbolList, topLevelSymbolIndex2,
+                            topLevelSymbol2), atomicRoot.level + 1, atomicRoot, null, null)
+                    atomicRoot.leftChild = leftChildNode
+                    atomicRoot.rightChild = rightChildNode
+                    unreducedNodeList.add(leftChildNode)
+                    unreducedNodeList.add(rightChildNode)
                 }
 
                 (node.proposition.topLevelSymbol == "\\and" && node.proposition.sign == true) ||
@@ -200,18 +216,15 @@ class Parse() {
                         sign1 = true
                         sign2 = false
                     }
-                    getLeafNodeList(node).forEach {
-                        var reducedNode = node.copy(level = it.level + 1, parentNode = it, leftChild = null, rightChild = null)
-                        it.leftChild = reducedNode
-                        var leftChild1Node = Node(Proposition(sign1, leftChild1SymbolList, topLevelSymbolIndex1,
-                                topLevelSymbol1), reducedNode.level + 1, reducedNode, null, null)
-                        var leftChild2Node = Node(Proposition(sign2, leftChild2SymbolList, topLevelSymbolIndex2,
-                                topLevelSymbol2), reducedNode.level + 2, leftChild1Node, null, null)
-                        reducedNode.leftChild = leftChild1Node
-                        leftChild1Node.leftChild = leftChild2Node
-                        unreducedNodeList.add(leftChild1Node)
-                        unreducedNodeList.add(leftChild2Node)
-                    }
+
+                    var leftChild1Node = Node(Proposition(sign1, leftChild1SymbolList, topLevelSymbolIndex1,
+                            topLevelSymbol1), atomicRoot.level + 1, atomicRoot, null, null)
+                    var leftChild2Node = Node(Proposition(sign2, leftChild2SymbolList, topLevelSymbolIndex2,
+                            topLevelSymbol2), atomicRoot.level + 2, leftChild1Node, null, null)
+                    atomicRoot.leftChild = leftChild1Node
+                    leftChild1Node.leftChild = leftChild2Node
+                    unreducedNodeList.add(leftChild1Node)
+                    unreducedNodeList.add(leftChild2Node)
                 }
             }
         }
@@ -237,43 +250,39 @@ class Parse() {
 
     private fun printTreeStructure(node: Node) {
         for (i in 1..node.level) print("\t")
-        node.proposition.content.forEach { print(it.value) }
-        println()
-        if (node.leftChild != null) {
-            printTreeStructure(node.leftChild!!)
-        }
-        if (node.rightChild != null) {
-            printTreeStructure(node.rightChild!!)
+        if (node.proposition.content.isEmpty()) {
+            print("null\n")
+        } else {
+            if (node.proposition.sign) print("T ") else print("F ")
+            node.proposition.content.forEach { print(it.value) }
+            println()
+            if (node.leftChild != null) {
+                printTreeStructure(node.leftChild!!)
+            }
+            if (node.rightChild != null) {
+                printTreeStructure(node.rightChild!!)
+            }
         }
     }
 
-    private fun printReduceSequence(root: Node) {
-        var nodes: MutableList<MutableList<Node>> = ArrayList()
-        fun enumerateNode(node: Node) {
-            if (node.proposition.content.size != 0) {
-                while (node.level >= nodes.size) {
-                    nodes.add(ArrayList())
-                }
-                nodes[node.level].add(nodes[node.level].size, node)
-                node.leftChild?.let {
-                    enumerateNode(node.leftChild!!)
-                }
-                node.rightChild?.let {
-                    enumerateNode(node.rightChild!!)
-                }
+    private fun printNode(node: Node) {
+        var file = File("./output/result.txt")
+        if (!file.exists()) {
+            try {
+                file.createNewFile();
+            } catch (ex: IOException) {
+                ex.printStackTrace();
             }
         }
-        enumerateNode(root)
-        nodes.forEach {
-            it.forEach { node ->
-                if (node.proposition.sign) print("T ") else print("F ")
-                node.proposition.content.forEach { symbol ->
-                    if (symbol.symbolType != SymbolType.UNARY_CONNECTIVE && symbol.symbolType != SymbolType.BINARY_CONNECTIVE)
-                        print(symbol.value) else print(" ${symbol.value} ")
-                }
-                println("")
-            }
+        var fw = FileWriter(file, true)
+        if (node.proposition.sign) fw.write("T ") else fw.write("F ")
+        node.proposition.content.forEach { symbol ->
+            if (symbol.symbolType != SymbolType.UNARY_CONNECTIVE && symbol.symbolType != SymbolType.BINARY_CONNECTIVE)
+                fw.write(symbol.value) else fw.write(" ${symbol.value} ")
         }
+        fw.write("\n")
+        fw.flush()
+        fw.close()
     }
 
     private fun isSymbolValid(s: String, c: String) = when {
@@ -333,6 +342,23 @@ class Parse() {
         return leafNodeList
     }
 
+    private fun getAllChildren(node: Node): List<Node> {
+        var childrenNodeList: MutableList<Node> = ArrayList()
+        fun getChildren(node: Node){
+            if (node.proposition.content.size != 0){
+                childrenNodeList.add(node)
+                if (node.leftChild != null) {
+                    getChildren(node.leftChild!!)
+                }
+                if (node.rightChild != null) {
+                    getChildren(node.rightChild!!)
+                }
+            }
+        }
+        getChildren(node)
+        return childrenNodeList
+    }
+
     private fun getUnfinishedLeafList(root: Node) = getLeafNodeList(root)
 
     private fun findCounterExample(root: Node): Node? {
@@ -341,9 +367,20 @@ class Parse() {
     }
 
     private fun printCounterExample(node: Node?, root: Node) {
-        println()
+        var file = File("./output/result.txt")
+        if (!file.exists()) {
+            try {
+                file.createNewFile();
+            } catch (ex: IOException) {
+                ex.printStackTrace();
+            }
+        }
+        var fw = FileWriter(file, true)
+
+        fw.write("\n")
+
         if (node == null)
-            println("There doesn't exist counter example")
+            fw.write("There doesn't exist counter example\n")
         else {
             var trueAssignment: MutableList<String> = ArrayList()
             node.let {
@@ -355,10 +392,14 @@ class Parse() {
                     nodePointer = nodePointer.parentNode
                 }
             }
-            println("Counter Example: ")
+            fw.write("Counter Example: \n")
             root.proposition.content.filter { it.symbolType == SymbolType.PROPOSITIONAL_LETTER }.map { it.value }.forEach {
-                if (trueAssignment.contains(it)) print("$it: True ") else print("$it: False ")
+                if (trueAssignment.contains(it)) fw.write("$it: True ") else fw.write("$it: False ")
             }
+            fw.write("\n")
         }
+
+        fw.flush()
+        fw.close()
     }
 }

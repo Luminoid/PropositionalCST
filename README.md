@@ -7,7 +7,8 @@ An algorithm for CST with premises in propositional logic
 ## 使用方式
 PropositionalCST_jar 文件夹内包含可直接运行的 jar 文件。
 程序会识别 input 文件夹中的 test.txt 文件，只要把想测试的文件名称改成 test.txt 即可进行测试。
-input 文件夹内一共包含3个测试样例，第三个样例含counterexample。
+input 文件夹内一共包含4个测试样例，第三个样例含counterexample。
+输出内容在output/result.txt中。
 
 ## 注意事项
 - 本程序使用 kotlin 语言在 IntelliJ 平台上开发，项目可以直接用 IntelliJ 打开
